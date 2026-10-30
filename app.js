@@ -5,6 +5,7 @@ try {
  }
 } catch(e){console.error("Supabase initialization failed",e);}
 var GROUPS={f:"Formators",M:"Major Seminarians",m:"Minor Seminarians"};
+var BATCHES=["Deacons","Third year Theology","Second year Theology","First year Theology","Regency","Third year Philosophy","Second year Philosophy","First year Philosophy","PG Students"];
 var PAGE_OF={formators:"f",major:"M",minor:"m"};
 var P=[],page="home",user=null,photo=null,majorQuery="",IX={a:0,b:0,m:0},TM=[];
 var C={a:[],b:[],m:[]};
@@ -60,16 +61,19 @@ async function restoreSession(){
   sb.auth.onAuthStateChange(function(ev,s){if(ev==="SIGNED_OUT"){user=null;loadCloudData();}else if(ev==="SIGNED_IN"&&s&&!user)setTimeout(function(){applyAuthenticatedUser(s.user)},0);});
  }catch(e){console.error(e);setStatus("Could not restore login: "+e.message,true);render();}
 }
-var applying=false;
-async function applyAuthenticatedUser(authUser){
- if(applying)return;applying=true;
+var applyP=null;
+function applyAuthenticatedUser(authUser){
+ if(applyP)return applyP;
+ applyP=applyAuthenticatedUserRun(authUser).finally(function(){applyP=null});
+ return applyP;
+}
+async function applyAuthenticatedUserRun(authUser){
  try{
   var r=await sb.from("directory_user_roles").select("role,person_id").eq("user_id",authUser.id).maybeSingle();if(r.error)throw r.error;
   if(!r.data){await sb.auth.signOut();user=null;await loadCloudData();setStatus("No directory role is assigned to this account. Ask the administrator.",true);return;}
   user={role:r.data.role,name:authUser.email||"User",id:r.data.person_id||null,authId:authUser.id,email:authUser.email};
   await loadCloudData();var me=user.id&&P.find(function(p){return String(p.id)===String(user.id)});if(me)user.name=me.name;
  }catch(e){console.error(e);setStatus("Could not load account permissions: "+e.message,true);render();}
- finally{applying=false;}
 }
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function ini(n){return n.replace(/^(Fr\.|Br\.)\s*/,"").split(/\s+/).slice(0,2).map(function(w){return w[0]}).join("").toUpperCase()}
@@ -90,7 +94,7 @@ function render(){
   return '<button onclick="go(\''+t[0]+'\')"'+(page===t[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24">'+ICON[t[0]]+'</svg>'+l+'</button>'}).join("");
  var a=document.getElementById("app");
  if(page==="home")a.innerHTML=homeV();
- else if(page==="login")a.innerHTML=user?acctV():loginV();
+ else if(page==="login")a.innerHTML=(user&&loginMode==="setpw")?setpwV():user?acctV():loginV();
  else a.innerHTML=page==="minor"?minorV():listV(PAGE_OF[page]);
  startC();
 }
@@ -99,6 +103,16 @@ function homeV(){
   var n=P.filter(function(p){return p.g===x[1]}).length;
   return '<button class="stat" onclick="go(\''+x[0]+'\')"><span>'+GROUPS[x[1]]+'</span><b>'+n+'</b></button>'}).join("");
  return '<section class="hero"><h1>Our seminary community</h1><p class="sub">'+(user?'Welcome, '+esc(user.name)+'. ':'')+'Find formators and seminarians, with their contact details and parish.</p>'+car("a","fx")+'<h2 class="sec">Life at the seminary</h2>'+car("b","sl")+'<div class="stats">'+b+'</div></section>';
+}
+function batchOf(p){var t=String(p.title||"").trim().toLowerCase();for(var i=0;i<BATCHES.length;i++)if(BATCHES[i].toLowerCase()===t)return i;return BATCHES.length}
+function byName(a,b){return String(a.name||"").localeCompare(String(b.name||""))}
+function cardH(p,sub){return '<button class="card" onclick="showP(\''+p.id+'\')"><div class="ph">'+av(p)+'</div><div class="nm">'+esc(p.name)+'<small>'+esc(sub)+'</small></div></button>'}
+function batchSel(cur){
+ cur=String(cur||"").trim();
+ var known=BATCHES.some(function(b){return b.toLowerCase()===cur.toLowerCase()});
+ var o='<option value="">Select batch…</option>'+BATCHES.map(function(b){return '<option value="'+esc(b)+'"'+(known&&b.toLowerCase()===cur.toLowerCase()?' selected':'')+'>'+esc(b)+'</option>'}).join("");
+ if(cur&&!known)o+='<option value="'+esc(cur)+'" selected>'+esc(cur)+' (current)</option>';
+ return '<label for="e_title">Course and year</label><select id="e_title">'+o+'</select>';
 }
 function listV(g){
  var all=P.filter(function(p){return p.g===g}),L=all;
@@ -110,7 +124,11 @@ function listV(g){
  var search=g==="M"?'<form class="search-form" onsubmit="searchMajor(event)"><input id="major-search" type="search" aria-label="Search major seminarians" placeholder="Search by name, course, or parish" value="'+esc(majorQuery)+'"><button class="btn" type="submit">Search</button></form>':"";
  var empty=all.length?(g==="M"?"No major seminarians match your search.":"No one listed yet."):"No one listed yet.";
  return '<div class="bar"><div><h1>'+GROUPS[g]+'</h1><p class="sub" style="margin-bottom:0">Tap a card to see full details.</p></div>'+add+'</div>'+search+
- (L.length?'<div class="grid">'+L.map(function(p){return '<button class="card" onclick="showP(\''+p.id+'\')"><div class="ph">'+av(p)+'</div><div class="nm">'+esc(p.name)+'<small>'+esc(p.title)+'</small></div></button>'}).join("")+'</div>':'<p class="empty">'+empty+'</p>');
+ (L.length?(g==="M"?BATCHES.concat(["Other"]).map(function(b,i){
+   var m=L.filter(function(p){return batchOf(p)===i}).sort(byName);
+   if(!m.length)return "";
+   return '<h2 class="yr">'+esc(b)+' <small style="color:var(--mu);font-weight:400;font-size:.9rem">('+m.length+')</small></h2><div class="grid">'+m.map(function(p){return cardH(p,i===BATCHES.length?p.title:p.parish)}).join("")+'</div>'}).join(""):
+  '<div class="grid">'+L.map(function(p){return cardH(p,p.title)}).join("")+'</div>'):'<p class="empty">'+empty+'</p>');
 }
 function searchMajor(e){e.preventDefault();majorQuery=document.getElementById("major-search").value.trim();render()}
 function showP(id){
@@ -161,7 +179,14 @@ function editP(id,g){
  var p=id?P.find(function(x){return x.id===id}):{g:g,name:"",title:"",parish:"",phone:"",email:"",address:""};
  photo=p.photo||null;
  function f(k,l){return '<label for="e_'+k+'">'+l+'</label><input id="e_'+k+'" value="'+esc(p[k])+'">'}
- modal('<h2>'+(id?'Edit details':'Add person')+'</h2>'+f("name","Full name")+f("title",p.g==="f"?"Role":p.g==="M"?"Course and year":"Year / class")+f("phone","Phone")+f("whatsapp","WhatsApp number")+f("instagram","Instagram username")+f("email","Email")+
+ function classSel(cur){
+  var years=["Third Year","Second Year","First Year"],value=String(cur||"").trim();
+  var known=years.some(function(year){return year.toLowerCase()===value.toLowerCase()});
+  var options='<option value="">Select year / class…</option>'+years.map(function(year){return '<option value="'+year+'"'+(known&&year.toLowerCase()===value.toLowerCase()?' selected':'')+'>'+year+'</option>'}).join("");
+  if(value&&!known)options+='<option value="'+esc(value)+'" selected>'+esc(value)+' (current)</option>';
+  return '<label for="e_title">Year / class</label><select id="e_title">'+options+'</select>';
+ }
+ modal('<h2>'+(id?'Edit details':'Add person')+'</h2>'+f("name","Full name")+(p.g==="M"?batchSel(p.title):p.g==="m"?classSel(p.title):f("title","Role"))+f("phone","Phone")+f("whatsapp","WhatsApp number")+f("instagram","Instagram username")+f("email","Email")+
  '<label for="e_address">Address</label><textarea id="e_address" rows="2">'+esc(p.address)+'</textarea>'+f("parish","Parish")+(p.g!=="m"?f("dob","Birthday").replace("<input",'<input placeholder="e.g. 8 March 2001"')+f("feast","Feast day"):"")+(p.g==="f"?f("ordinationDay","Ordination day"):"")+(p.g==="M"?f("seminary","Seminary"):"")+
  '<label for="e_photo">Photo</label><input id="e_photo" type="file" accept="image/*" onchange="pick(this)">'+
  '<div class="err" id="eerr"></div><div class="row"><button class="btn" onclick="saveP(\''+(id||"")+'\',\''+p.g+'\')">Save changes</button><button class="btn alt" onclick="closeM()">Cancel</button></div>');
@@ -194,11 +219,63 @@ async function deletePersonCloud(id){
  try{var r=await sb.from("directory_people").delete().eq("id",String(id));if(r.error)throw r.error;P=P.filter(function(x){return String(x.id)!==String(id)});closeM();render();setStatus("Person deleted from Supabase.");}
  catch(e){console.error(e);var el=document.getElementById("derr");if(el)el.textContent="Delete failed: "+e.message;}
 }
+function pwF(id,ac,min){
+ return '<div class="pw"><input id="'+id+'" type="password" autocomplete="'+ac+'"'+(min?' minlength="8"':'')+' required><button type="button" class="pwt" aria-label="Show password" aria-pressed="false" onclick="togglePw(\''+id+'\',this)">Show</button></div>';
+}
+function togglePw(id,b){
+ var i=document.getElementById(id),show=i.type==="password";
+ i.type=show?"text":"password";b.textContent=show?"Hide":"Show";
+ b.setAttribute("aria-pressed",show?"true":"false");b.setAttribute("aria-label",show?"Hide password":"Show password");
+}
+var loginMode="pw",codeEmail="";
+function setMode(m){loginMode=m;render();}
 function loginV(){
+ if(loginMode==="pw")return loginPwV();
+ var head='<h1 style="margin-bottom:8px">Login</h1>';
+ if(loginMode==="email")return head+'<p class="sub">Enter the email on your card in the directory. We will email you a code.</p><form onsubmit="sendCode(event)"><label for="ce">Email</label><input id="ce" type="email" autocomplete="email" required><div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Email me a code</button><button class="btn alt" type="button" onclick="setMode(\'pw\')">Back</button></div></form>';
+ return head+'<p class="sub">We sent a code to '+esc(codeEmail)+'. Enter it below. Check your spam folder if you cannot find it.</p><form onsubmit="checkCode(event)"><label for="cc">Code</label><input id="cc" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required><div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Verify</button><button class="btn alt" type="button" onclick="setMode(\'email\')">Use another email</button></div></form>';
+}
+async function sendCode(e){
+ e.preventDefault();
+ var email=document.getElementById("ce").value.trim(),err=document.getElementById("lerr"),btn=e.submitter;
+ if(!cloudReady){err.textContent="Configure SUPABASE_URL and SUPABASE_ANON_KEY in config.js.";return;}
+ var ok=P.some(function(p){return (p.g==="f"||p.g==="M")&&String(p.email||"").trim().toLowerCase()===email.toLowerCase()});
+ if(!ok){err.textContent="This email is not on a formator or major seminarian card. Ask the administrator to add it.";return;}
+ if(btn)btn.disabled=true;err.textContent="Sending…";
+ try{var r=await sb.auth.signInWithOtp({email:email,options:{shouldCreateUser:true}});if(r.error)throw r.error;codeEmail=email;loginMode="code";render();}
+ catch(ex){console.error(ex);err.textContent="Could not send the code: "+ex.message;}
+ finally{if(btn)btn.disabled=false;}
+}
+async function checkCode(e){
+ e.preventDefault();
+ var token=document.getElementById("cc").value.replace(/\s/g,""),err=document.getElementById("lerr"),btn=e.submitter;
+ if(btn)btn.disabled=true;err.textContent="Checking…";
+ try{
+  var r=await sb.auth.verifyOtp({email:codeEmail,token:token,type:"email"});if(r.error)throw r.error;
+  await applyAuthenticatedUser(r.data.user);
+  loginMode=user?"setpw":"pw";render();
+ }catch(ex){console.error(ex);err.textContent="That code did not work: "+ex.message;}
+ finally{if(btn)btn.disabled=false;}
+}
+function setpwV(){
+ return '<h1 style="margin-bottom:8px">Set your password</h1><p class="sub">Choose a password to use the next time you log in.</p><form onsubmit="savePw(event)"><label for="np">New password (at least 8 characters)</label>'+pwF("np","new-password",1)+'<label for="np2">Repeat password</label>'+pwF("np2","new-password",1)+'<div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Save password</button><button class="btn alt" type="button" onclick="skipPw()">Skip for now</button></div></form>';
+}
+async function savePw(e){
+ e.preventDefault();
+ var a=document.getElementById("np").value,b=document.getElementById("np2").value,err=document.getElementById("lerr"),btn=e.submitter;
+ if(a!==b){err.textContent="The two passwords do not match.";return;}
+ if(btn)btn.disabled=true;err.textContent="Saving…";
+ try{var r=await sb.auth.updateUser({password:a});if(r.error)throw r.error;loginMode="pw";go("home");setStatus("Password saved. Use it next time you log in.");}
+ catch(ex){console.error(ex);err.textContent="Could not save password: "+ex.message;}
+ finally{if(btn)btn.disabled=false;}
+}
+function skipPw(){loginMode="pw";go("home");}
+function loginPwV(){
  return '<h1 style="margin-bottom:8px">Login</h1>'+
  (!cloudReady?'<p class="err">Supabase is not configured. Add your Project URL and publishable/anon key in config.js.</p>':'')+
- '<form onsubmit="doLogin(event)"><label for="lu">Email</label><input id="lu" type="email" autocomplete="username" required><label for="lp">Password</label><input id="lp" type="password" autocomplete="current-password" required><div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Log in</button></div></form>'+
- '<p class="note">Use an account created in Supabase Authentication. An administrator must assign a role in directory_user_roles before the account can access records.</p>';
+ '<form onsubmit="doLogin(event)"><label for="lu">Email</label><input id="lu" type="email" autocomplete="username" required><label for="lp">Password</label>'+pwF("lp","current-password")+'<div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Log in</button></div></form>'+
+ '<p style="margin-top:16px"><button class="btn alt" type="button" onclick="setMode(\'email\')">First time or forgot password? Get a code</button></p>'+
+ '<p class="note">Formators and major seminarians: use the email on your card in the directory.</p>';
 }
 async function doLogin(e){
  e.preventDefault();
@@ -214,7 +291,7 @@ async function doLogin(e){
 }
 async function doLogout(){
  if(cloudReady){var r=await sb.auth.signOut();if(r.error){setStatus("Logout failed: "+r.error.message,true);return;}}
- user=null;await loadCloudData();go("home");
+ user=null;loginMode="pw";await loadCloudData();go("home");
 }
 function acctV(){
  var me=user.id?P.find(function(x){return x.id===user.id}):null;
