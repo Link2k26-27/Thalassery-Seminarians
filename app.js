@@ -8,12 +8,36 @@ var GROUPS={f:"Formators",M:"Major Seminarians",m:"Minor Seminarians"};
 var BATCHES=["Deacons","Third year Theology","Second year Theology","First year Theology","Regency","Third year Philosophy","Second year Philosophy","First year Philosophy","PG Students"];
 var PAGE_OF={formators:"f",major:"M",minor:"m"};
 var P=[],page="home",user=null,photo=null,majorQuery="",IX={a:0,b:0,m:0},TM=[];
+var IDLE_TIMEOUT=10*60*1000,idleTimer=null,idleDeadline=0,lastActivityAt=0,idleLogoutPending=false;
 var C={a:[],b:[],m:[]};
 function setStatus(message,isError){
  var el=document.getElementById("cloud-status");
  if(!el){el=document.createElement("div");el.id="cloud-status";el.style.cssText="position:fixed;top:10px;left:12px;right:12px;z-index:50;padding:10px 14px;border-radius:12px;background:rgba(10,31,61,.97);border:1px solid rgba(255,255,255,.3);color:#F4F9FF;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.25)";document.body.appendChild(el);}
  el.style.borderColor=isError?"#FFC2C2":"#92FE9D";el.textContent=message;el.style.display=message?"block":"none";
  if(message&&!isError)setTimeout(function(){if(el.textContent===message)el.style.display="none"},4500);
+}
+function clearIdleLogoutTimer(){
+ if(idleTimer!==null){clearTimeout(idleTimer);idleTimer=null;}
+ idleDeadline=0;
+}
+function scheduleIdleLogout(){
+ if(!user||idleLogoutPending||user.role==="admin")return;
+ if(idleTimer!==null){clearTimeout(idleTimer);idleTimer=null;}
+ var remaining=idleDeadline-Date.now();
+ if(remaining<=0){
+  idleLogoutPending=true;
+  doLogout().then(function(ok){idleLogoutPending=false;if(!ok&&user)noteActivity();}).catch(function(e){idleLogoutPending=false;console.error(e);setStatus("Automatic logout failed: "+e.message,true);if(user)noteActivity();});
+  return;
+ }
+ idleTimer=setTimeout(scheduleIdleLogout,remaining);
+}
+function noteActivity(){
+ if(!user||idleLogoutPending)return;
+ if(user.role==="admin"){clearIdleLogoutTimer();return;}
+ var now=Date.now();
+ if(idleDeadline&&now>=idleDeadline){scheduleIdleLogout();return;}
+ if(idleDeadline&&now-lastActivityAt<1000)return;
+ lastActivityAt=now;idleDeadline=now+IDLE_TIMEOUT;scheduleIdleLogout();
 }
 function save(){return savePeopleToCloud();}
 function saveC(){return saveCarouselToCloud();}
@@ -58,7 +82,7 @@ async function restoreSession(){
  try{
   var r=await sb.auth.getSession();if(r.error)throw r.error;
   if(r.data.session)await applyAuthenticatedUser(r.data.session.user);else await loadCloudData();
-  sb.auth.onAuthStateChange(function(ev,s){if(ev==="SIGNED_OUT"){user=null;loadCloudData();}else if(ev==="SIGNED_IN"&&s&&!user)setTimeout(function(){applyAuthenticatedUser(s.user)},0);});
+  sb.auth.onAuthStateChange(function(ev,s){if(ev==="SIGNED_OUT"){user=null;clearIdleLogoutTimer();loadCloudData();}else if(ev==="SIGNED_IN"&&s&&!user)setTimeout(function(){applyAuthenticatedUser(s.user)},0);});
  }catch(e){console.error(e);setStatus("Could not restore login: "+e.message,true);render();}
 }
 var applyP=null;
@@ -72,6 +96,7 @@ async function applyAuthenticatedUserRun(authUser){
   var r=await sb.from("directory_user_roles").select("role,person_id").eq("user_id",authUser.id).maybeSingle();if(r.error)throw r.error;
   if(!r.data){await sb.auth.signOut();user=null;await loadCloudData();setStatus("No directory role is assigned to this account. Ask the administrator.",true);return;}
   user={role:r.data.role,name:authUser.email||"User",id:r.data.person_id||null,authId:authUser.id,email:authUser.email};
+  noteActivity();
   await loadCloudData();var me=user.id&&P.find(function(p){return String(p.id)===String(user.id)});if(me)user.name=me.name;
  }catch(e){console.error(e);setStatus("Could not load account permissions: "+e.message,true);render();}
 }
@@ -290,12 +315,18 @@ async function doLogin(e){
  finally{if(btn)btn.disabled=false;}
 }
 async function doLogout(){
- if(cloudReady){var r=await sb.auth.signOut();if(r.error){setStatus("Logout failed: "+r.error.message,true);return;}}
- user=null;loginMode="pw";await loadCloudData();go("home");
+ if(cloudReady){var r=await sb.auth.signOut();if(r.error){setStatus("Logout failed: "+r.error.message,true);return false;}}
+ user=null;clearIdleLogoutTimer();loginMode="pw";await loadCloudData();go("home");return true;
 }
 function acctV(){
  var me=user.id?P.find(function(x){return x.id===user.id}):null;
  var info={admin:"You can add, edit and delete anyone in the directory.",staff:"You can add and edit people in the directory.",seminarian:"You can update your own details."}[user.role];
  return '<h1>'+esc(user.name)+'</h1><p class="sub">Signed in as '+user.role+'. '+info+'</p><div class="row" style="margin-top:0">'+(me?'<button class="btn" onclick="editP(\''+me.id+'\')">Edit my details</button>':'')+'<button class="btn alt" onclick="doLogout()">Log out</button></div>';
 }
+document.addEventListener("pointerdown",noteActivity);
+document.addEventListener("pointermove",noteActivity,{passive:true});
+document.addEventListener("keydown",noteActivity);
+document.addEventListener("touchstart",noteActivity,{passive:true});
+document.addEventListener("scroll",noteActivity,{passive:true});
+document.addEventListener("visibilitychange",function(){if(!document.hidden&&idleDeadline&&Date.now()>=idleDeadline)scheduleIdleLogout();});
 restoreSession();
