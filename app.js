@@ -300,7 +300,7 @@ function loginPwV(){
  (!cloudReady?'<p class="err">Supabase is not configured. Add your Project URL and publishable/anon key in config.js.</p>':'')+
  '<form onsubmit="doLogin(event)"><label for="lu">Email</label><input id="lu" type="email" autocomplete="username" required><label for="lp">Password</label>'+pwF("lp","current-password")+'<div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Log in</button></div></form>'+
  '<p style="margin-top:16px"><button class="btn alt" type="button" onclick="setMode(\'email\')">First time or forgot password? Get a code</button></p>'+
- '<p class="note">Formators and major seminarians: use the email on your card in the directory.</p>';
+ '<p class="note">Formators and Major Seminarians: use the email on your card in the directory.</p>';
 }
 async function doLogin(e){
  e.preventDefault();
