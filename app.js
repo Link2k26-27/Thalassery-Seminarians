@@ -8,7 +8,7 @@ var GROUPS={f:"Formators",M:"Major Seminarians",m:"Minor Seminarians"};
 var BATCHES=["Deacons","Third year Theology","Second year Theology","First year Theology","Regency","Third year Philosophy","Second year Philosophy","First year Philosophy","PG Students"];
 var PAGE_OF={formators:"f",major:"M",minor:"m"};
 var P=[],page="home",user=null,photo=null,majorQuery="",IX={a:0,b:0,m:0},TM=[];
-var IDLE_TIMEOUT=10*60*1000,idleTimer=null,idleDeadline=0,lastActivityAt=0,idleLogoutPending=false;
+var IDLE_TIMEOUT=1*60*1000,idleTimer=null,idleDeadline=0,lastActivityAt=0,idleLogoutPending=false;
 var C={a:[],b:[],m:[]};
 function setStatus(message,isError){
  var el=document.getElementById("cloud-status");
