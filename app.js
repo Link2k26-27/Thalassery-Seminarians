@@ -119,7 +119,7 @@ function render(){
   return '<button onclick="go(\''+t[0]+'\')"'+(page===t[0]?' aria-current="page"':'')+'><svg viewBox="0 0 24 24">'+ICON[t[0]]+'</svg>'+l+'</button>'}).join("");
  var a=document.getElementById("app");
  if(page==="home")a.innerHTML=homeV();
- else if(page==="login")a.innerHTML=(user&&loginMode==="setpw")?setpwV():user?acctV():loginV();
+ else if(page==="login")a.innerHTML='<section class="auth-page">'+((user&&loginMode==="setpw")?setpwV():user?acctV():loginV())+'</section>';
  else a.innerHTML=page==="minor"?minorV():listV(PAGE_OF[page]);
  startC();
 }
@@ -167,9 +167,33 @@ function showP(id){
   ["Email",p.email&&"mailto:"+p.email,"mail",'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m3.5 6 8.5 7 8.5-7M4 18l6.3-6M20 18l-6.3-6"/></svg>']
  ].filter(function(x){return x[1]}).map(function(x){var target=x[0]==="WhatsApp"||x[0]==="Instagram"?' target="_blank" rel="noopener noreferrer"':"";return '<a class="'+x[2]+'" href="'+esc(x[1])+'" aria-label="'+x[0]+'" title="'+x[0]+'"'+target+'>'+x[3]+'<span class="sr-only">'+x[0]+'</span></a>'}).join("");
  ct=ct?'<div class="ct">'+ct+'</div>':"";
- var rows=[["Phone",p.phone],["Email",p.email],["Parish",p.parish],["Birthday",p.dob&&fd(p.dob)],["Ordination day",p.ordinationDay],["Feast",p.feast],["Seminary",p.seminary],["Address",p.address]].filter(function(r){return r[1]}).map(function(r){return '<div><dt>'+r[0]+'</dt><dd>'+esc(r[1])+'</dd></div>'}).join("");
+ var rows=[["Address",p.address],["Parish",p.parish],["Birthday",p.dob&&fd(p.dob)],["Feast",p.feast],["Phone",p.phone],["Email",p.email],["Ordination day",p.ordinationDay],["Seminary",p.seminary]].filter(function(r){return r[1]}).map(function(r){
+  var copyable=["Address","Phone","Email"].indexOf(r[0])>=0;
+  var copy=copyable?'<button type="button" class="copy-field" data-copy="'+esc(r[1])+'" data-copy-label="'+r[0].toLowerCase()+'" aria-label="Copy '+r[0].toLowerCase()+'" title="Copy '+r[0].toLowerCase()+'" onclick="copyField(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>':"";
+  return '<div><dt>'+r[0]+'</dt><dd><span class="detail-value">'+esc(r[1])+'</span>'+copy+'</dd></div>';
+ }).join("");
  var act=(canEdit(p)?'<button class="btn" onclick="editP(\''+p.id+'\')">Edit details</button>':'')+(user&&user.role==="admin"?'<button class="btn del" onclick="delP(\''+p.id+'\')">Delete</button>':'');
- modal('<div class="top"><div class="ph">'+av(p)+'</div><div><h2>'+esc(p.name)+'</h2><div style="color:var(--mu)">'+esc(p.title)+'</div></div></div>'+ct+'<dl>'+rows+'</dl><div class="row">'+act+'<button class="btn alt" onclick="closeM()">Close</button></div>');
+ modal('<div class="profile-hero"><div class="top"><div class="ph">'+av(p)+'</div><div><h2>'+esc(p.name)+'</h2><div class="profile-role">'+esc(p.title)+'</div></div></div>'+ct+'</div><div class="profile-info"><dl>'+rows+'</dl><div class="row">'+act+'<button class="btn alt" onclick="closeM()">Close</button></div></div>',"profile");
+}
+async function copyField(button){
+ var value=button.getAttribute("data-copy"),label=button.getAttribute("data-copy-label")||"text";
+ try{
+  var copied=false;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+   try{await navigator.clipboard.writeText(value);copied=true;}
+   catch(e){copied=legacyCopy(value);if(!copied)throw e;}
+  }else copied=legacyCopy(value);
+  if(!copied)throw new Error("Clipboard access is unavailable in this browser.");
+  setStatus(label.charAt(0).toUpperCase()+label.slice(1)+" copied.");
+ }catch(e){console.error(e);setStatus("Could not copy "+label+": "+(e.message||"Clipboard access was denied."),true);}
+}
+function legacyCopy(value){
+ var field=document.createElement("textarea");
+ field.value=value;field.setAttribute("readonly","");
+ field.style.cssText="position:fixed;left:-9999px;top:0;opacity:0";
+ document.body.appendChild(field);field.select();
+ try{return document.execCommand("copy");}
+ finally{document.body.removeChild(field);}
 }
 function fd(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return s;var d=new Date(s+"T00:00");return isNaN(d)?s:d.toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})}
 function minorV(){
@@ -198,7 +222,7 @@ function startC(){TM.forEach(clearInterval);TM=[];["a","b","m"].forEach(function
 function shrink(f,mx,cb){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var c=document.createElement("canvas"),s=Math.min(1,mx/Math.max(im.width,im.height));c.width=im.width*s;c.height=im.height*s;c.getContext("2d").drawImage(im,0,0,c.width,c.height);cb(c.toDataURL("image/jpeg",.8))};im.src=r.result};r.readAsDataURL(f)}
 function addImg(k,i){var f=i.files[0];if(!f)return;shrink(f,700,function(u){C[k].push({id:"i"+Date.now(),img:u});IX[k]=C[k].length-1;saveC().then(function(ok){render();if(ok)setStatus("Carousel image saved to Supabase.")})})}
 function rmImg(k){if(!C[k]||!C[k].length)return;C[k].splice(IX[k],1);IX[k]=0;saveC().then(function(ok){render();if(ok)setStatus("Carousel updated in Supabase.")})}
-function modal(h){var m=document.getElementById("modal");m.innerHTML='<div class="ov" onclick="if(event.target===this)closeM()"><div class="sheet" role="dialog" aria-modal="true">'+h+'</div></div>'}
+function modal(h,type){var m=document.getElementById("modal");m.innerHTML='<div class="ov'+(type==="profile"?' profile-ov':'')+'" onclick="if(event.target===this)closeM()"><div class="sheet'+(type==="profile"?' profile-sheet':'')+'" role="dialog" aria-modal="true">'+h+'</div></div>'}
 function closeM(){document.getElementById("modal").innerHTML=""}
 function editP(id,g){
  var p=id?P.find(function(x){return x.id===id}):{g:g,name:"",title:"",parish:"",phone:"",email:"",address:""};
@@ -299,7 +323,7 @@ function loginPwV(){
  return '<h1 style="margin-bottom:8px">Login</h1>'+
  (!cloudReady?'<p class="err">Supabase is not configured. Add your Project URL and publishable/anon key in config.js.</p>':'')+
  '<form onsubmit="doLogin(event)"><label for="lu">Email</label><input id="lu" type="email" autocomplete="username" required><label for="lp">Password</label>'+pwF("lp","current-password")+'<div class="err" id="lerr"></div><div class="row"><button class="btn" type="submit">Log in</button></div></form>'+
- '<p style="margin-top:16px"><button class="btn alt" type="button" onclick="setMode(\'email\')">First time or forgot password? Get a code</button></p>'+
+ '<p class="forgot-password" style="margin-top:16px"><button class="btn alt" type="button" onclick="setMode(\'email\')">First time or forgot password? Get a code</button></p>'+
  '<p class="note">Formators and Major Seminarians: use the email on your card in the directory.</p>';
 }
 async function doLogin(e){
