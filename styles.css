@@ -224,3 +224,86 @@ label.btn{color:#92FE9D}
 .profile-sheet .copy-field svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .profile-sheet .copy-field:hover{background:rgba(127,233,255,.2);border-color:#b8f5ff}
 .profile-sheet .copy-field:active{transform:scale(.94)}
+
+/* Mobile layout and compact controls */
+*,*::before,*::after{box-sizing:border-box}
+html{overflow-x:hidden}
+body{overflow-x:hidden}
+button,input,select,textarea{max-width:100%}
+img,svg{max-width:100%}
+
+@media(max-width:600px){
+ main{width:100%;padding:14px 12px 92px}
+ h1{font-size:clamp(1.55rem,7vw,1.9rem)}
+ .hero h1{font-size:clamp(1.75rem,8vw,2.15rem)}
+ .sub{margin-bottom:16px}
+
+ .bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+ .bar>div{flex:1 1 180px}
+ .bar>.btn{flex:0 0 auto}
+ .search-form{flex-wrap:wrap}
+ .search-form input{flex:1 1 180px}
+ .search-form .btn{flex:0 0 auto}
+
+ .btn,button.btn{min-height:40px;padding:8px 12px;font-size:.82rem;line-height:1.2}
+ .btn.alt,.btn.del{padding:8px 11px}
+ .row .btn{min-height:40px}
+ .seg{overflow-x:auto}
+ .seg button{min-height:38px;padding:8px}
+ .pwt{min-height:36px;padding:6px 9px;font-size:.78rem}
+
+ input,select,textarea{font-size:16px}
+ .search-form input{min-height:42px}
+
+ .stats{gap:8px}
+ .stat{border-radius:16px;padding:12px 14px}
+ .stat b{font-size:1.45rem}
+ .cr{border-radius:18px}
+ .sd span{padding:12px;font-size:1.05rem}
+ .sl .sd{border-radius:18px}
+ .dots{right:10px;bottom:8px}
+
+ .ct{gap:8px}
+ .ct a{width:52px;border-radius:14px}
+ .ct svg{width:30px;height:30px}
+ .ct a.wa svg{width:38px;height:38px}
+ .profile-sheet .ct a{width:52px}
+ .profile-sheet .ct svg{width:30px;height:30px}
+ .profile-sheet .ct a.wa svg{width:37px;height:37px}
+
+ nav{padding-bottom:calc(5px + env(safe-area-inset-bottom,0px))}
+ nav button{min-height:52px;padding:5px 1px;font-size:.62rem}
+ nav button svg{width:20px;height:20px}
+}
+
+@media(max-width:360px){
+ main{padding-right:10px;padding-left:10px}
+ .grid{gap:7px}
+ .card{padding:6px;border-radius:15px}
+ .card .nm{font-size:.82rem}
+ .card .nm small{font-size:.72rem}
+
+ .bar>div{flex-basis:150px}
+ .btn,button.btn{padding:8px 9px;font-size:.78rem}
+ .search-form{gap:6px}
+
+ .profile-hero{padding-right:12px;padding-left:12px}
+ .profile-sheet .top .ph{width:clamp(112px,36vw,132px)}
+ .profile-sheet .top h2{font-size:1.25rem}
+ .profile-sheet dl>div{grid-template-columns:76px minmax(0,1fr);gap:7px;padding:7px 8px}
+ .profile-sheet dt{font-size:.8rem}
+ .profile-sheet dd{font-size:.88rem}
+ .profile-sheet .row{gap:6px}
+ .profile-sheet .row .btn{min-height:38px;padding:7px 8px;font-size:.76rem}
+
+ .ct{gap:6px}
+ .ct a{width:48px;border-radius:13px}
+ .ct svg{width:28px;height:28px}
+ .ct a.wa svg{width:34px;height:34px}
+ .profile-sheet .ct a{width:48px}
+ .profile-sheet .ct svg{width:28px;height:28px}
+ .profile-sheet .ct a.wa svg{width:34px;height:34px}
+
+ nav button{font-size:.58rem}
+ nav button svg{width:18px;height:18px}
+}

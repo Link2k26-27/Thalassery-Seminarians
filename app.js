@@ -46,10 +46,11 @@ async function loadCloudData(){
  try{
   var pr=await sb.from("directory_people").select("id,group_key,data,auth_user_id").order("name",{ascending:true});
   if(pr.error)throw pr.error;
-  P=(pr.data||[]).map(function(r){var d=r.data||{};d.id=r.id;d.g=r.group_key;if(r.auth_user_id)d.auth_user_id=r.auth_user_id;return d;});
+  P=(pr.data||[]).map(function(r){var d=r.data||{};d.id=r.id;d.g=r.group_key;if(d.whatsapp)d.whatsapp=normalizeWhatsApp(d.whatsapp);if(r.auth_user_id)d.auth_user_id=r.auth_user_id;return d;});
   var cr=await sb.from("directory_carousels").select("key,items");
   if(cr.error)throw cr.error;
   C={a:[],b:[],m:[]};(cr.data||[]).forEach(function(r){if(["a","b","m"].indexOf(r.key)>=0)C[r.key]=Array.isArray(r.items)?r.items:[];});
+  if(user&&user.role==="admin")await savePeopleToCloud();
   render();
  }catch(e){console.error(e);setStatus("Could not load cloud data: "+(e.message||"Check SQL setup and access policies."),true);}
 }
@@ -101,6 +102,16 @@ async function applyAuthenticatedUserRun(authUser){
  }catch(e){console.error(e);setStatus("Could not load account permissions: "+e.message,true);render();}
 }
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function normalizeWhatsApp(value){
+ var digits=String(value||"").replace(/\D/g,"");
+ if(!digits)return "";
+ if(digits.indexOf("0091")===0)digits=digits.slice(2);
+ if(digits.length===12&&digits.indexOf("91")===0)return "+"+digits;
+ if(digits.length===11&&digits.indexOf("0")===0)digits=digits.slice(1);
+ if(digits.length===10)return "+91"+digits;
+ if(digits.indexOf("91")===0)return "+"+digits;
+ return "+"+digits;
+}
 function ini(n){return n.replace(/^(Fr\.|Br\.)\s*/,"").split(/\s+/).slice(0,2).map(function(w){return w[0]}).join("").toUpperCase()}
 function av(p){return p.photo?'<img src="'+esc(p.photo)+'" alt="">':esc(ini(p.name))}
 var canAdd=function(){return user&&(user.role==="admin"||user.role==="staff")};
@@ -167,8 +178,8 @@ function showP(id){
   ["Email",p.email&&"mailto:"+p.email,"mail",'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="m3.5 6 8.5 7 8.5-7M4 18l6.3-6M20 18l-6.3-6"/></svg>']
  ].filter(function(x){return x[1]}).map(function(x){var target=x[0]==="WhatsApp"||x[0]==="Instagram"?' target="_blank" rel="noopener noreferrer"':"";return '<a class="'+x[2]+'" href="'+esc(x[1])+'" aria-label="'+x[0]+'" title="'+x[0]+'"'+target+'>'+x[3]+'<span class="sr-only">'+x[0]+'</span></a>'}).join("");
  ct=ct?'<div class="ct">'+ct+'</div>':"";
- var rows=[["Address",p.address],["Parish",p.parish],["Birthday",p.dob&&fd(p.dob)],["Feast",p.feast],["Phone",p.phone],["Email",p.email],["Ordination day",p.ordinationDay],["Seminary",p.seminary]].filter(function(r){return r[1]}).map(function(r){
-  var copyable=["Address","Phone","Email"].indexOf(r[0])>=0;
+ var rows=[["Address",p.address],["Parish",p.parish],["Birthday",p.dob&&fd(p.dob)],["Feast",p.feast],["Phone",p.phone],["WhatsApp",p.whatsapp],["Email",p.email],["Ordination day",p.ordinationDay],["Seminary",p.seminary]].filter(function(r){return r[1]}).map(function(r){
+  var copyable=["Address","Phone","WhatsApp","Email"].indexOf(r[0])>=0;
   var copy=copyable?'<button type="button" class="copy-field" data-copy="'+esc(r[1])+'" data-copy-label="'+r[0].toLowerCase()+'" aria-label="Copy '+r[0].toLowerCase()+'" title="Copy '+r[0].toLowerCase()+'" onclick="copyField(this)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>':"";
   return '<div><dt>'+r[0]+'</dt><dd><span class="detail-value">'+esc(r[1])+'</span>'+copy+'</dd></div>';
  }).join("");
@@ -227,6 +238,7 @@ function closeM(){document.getElementById("modal").innerHTML=""}
 function editP(id,g){
  var p=id?P.find(function(x){return x.id===id}):{g:g,name:"",title:"",parish:"",phone:"",email:"",address:""};
  photo=p.photo||null;
+ if(p.whatsapp)p.whatsapp=normalizeWhatsApp(p.whatsapp);
  function f(k,l){return '<label for="e_'+k+'">'+l+'</label><input id="e_'+k+'" value="'+esc(p[k])+'">'}
  function classSel(cur){
   var years=["Third Year","Second Year","First Year"],value=String(cur||"").trim();
@@ -235,7 +247,9 @@ function editP(id,g){
   if(value&&!known)options+='<option value="'+esc(value)+'" selected>'+esc(value)+' (current)</option>';
   return '<label for="e_title">Year / class</label><select id="e_title">'+options+'</select>';
  }
- modal('<h2>'+(id?'Edit details':'Add person')+'</h2>'+f("name","Full name")+(p.g==="M"?batchSel(p.title):p.g==="m"?classSel(p.title):f("title","Role"))+f("phone","Phone")+f("whatsapp","WhatsApp number")+f("instagram","Instagram username")+f("email","Email")+
+ modal('<h2>'+(id?'Edit details':'Add person')+'</h2>'+f("name","Full name")+(p.g==="M"?batchSel(p.title):p.g==="m"?classSel(p.title):f("title","Role"))+f("phone","Phone")+
+ '<label for="e_whatsapp">WhatsApp number</label><input id="e_whatsapp" inputmode="tel" placeholder="+91 9876543210" value="'+esc(p.whatsapp)+'">'+
+ f("instagram","Instagram username")+f("email","Email")+
  '<label for="e_address">Address</label><textarea id="e_address" rows="2">'+esc(p.address)+'</textarea>'+f("parish","Parish")+(p.g!=="m"?f("dob","Birthday").replace("<input",'<input placeholder="e.g. 8 March 2001"')+f("feast","Feast day"):"")+(p.g==="f"?f("ordinationDay","Ordination day"):"")+(p.g==="M"?f("seminary","Seminary"):"")+
  '<label for="e_photo">Photo</label><input id="e_photo" type="file" accept="image/*" onchange="pick(this)">'+
  '<div class="err" id="eerr"></div><div class="row"><button class="btn" onclick="saveP(\''+(id||"")+'\',\''+p.g+'\')">Save changes</button><button class="btn alt" onclick="closeM()">Cancel</button></div>');
@@ -248,7 +262,7 @@ function pick(i){
 async function saveP(id,g){
  var v=function(k){return document.getElementById("e_"+k).value.trim()};
  if(!v("name")){document.getElementById("eerr").textContent="Enter a name to save.";return}
- var d={name:v("name"),title:v("title"),phone:v("phone"),email:v("email"),address:v("address"),parish:v("parish"),whatsapp:v("whatsapp"),instagram:v("instagram"),photo:photo};
+ var d={name:v("name"),title:v("title"),phone:v("phone"),email:v("email"),address:v("address"),parish:v("parish"),whatsapp:normalizeWhatsApp(v("whatsapp")),instagram:v("instagram"),photo:photo};
  if(document.getElementById("e_dob"))d.dob=v("dob"),d.feast=v("feast");
  if(document.getElementById("e_ordinationDay"))d.ordinationDay=v("ordinationDay");
  if(document.getElementById("e_seminary"))d.seminary=v("seminary");
